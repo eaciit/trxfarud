@@ -2,8 +2,6 @@ import numpy as np
 import time
 from datetime import timedelta
 
-np.random.seed(2)  # for reproducibility
-
 from keras.datasets import mnist
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
@@ -12,7 +10,7 @@ from keras import backend as K
 
 from sklearn.metrics import f1_score, confusion_matrix
 from sklearn.preprocessing import normalize
-from sklearn.cross_validation import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
 
 import tensorflow as tf
 
@@ -54,7 +52,7 @@ def balanced_subsample(x,y,subsample_size=1.0):
 
 def load_data():
     rd = np.loadtxt('creditcard.csv', delimiter=',', converters={30: lambda s: float(s.replace('\"', ''))}, skiprows=1)
-    print "> Preprocessing Data"
+    print 'Preprocessing Data'
     rds = np.split(rd, [30, 31], axis=1)
 
     data = rds[0]
@@ -72,6 +70,8 @@ def run(X_train, y_train, X_val, y_val):
     batch_size = 4
     nb_epoch = 1
     init = 'glorot_normal'
+
+    print 'GENERATING MODEL'
 
     p = np.random.permutation(len(X_train))
     X_train = X_train[p]
@@ -91,46 +91,60 @@ def run(X_train, y_train, X_val, y_val):
     model.add(Activation('tanh'))
     model.add(Dense(8, init=init))
     model.add(Activation('tanh'))
-    model.add(Dense(nb_classes, init=init, activation="softmax", name="predictions"))
+    model.add(Dense(nb_classes, init=init, activation='softmax', name='predictions'))
 
-    model.compile(loss='binary_crossentropy', optimizer="rmsprop", metrics=["acc"])
+    model.compile(loss='binary_crossentropy', optimizer='rmsprop')
     # model.summary()
 
     cw = { 0: 1, 1: 577}
-    model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, verbose=0, validation_data=(X_val, Y_val), class_weight=cw)
+    model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epoch, verbose=1, validation_data=(X_val, Y_val), class_weight=cw)
 
-    print "> MODEL GENERATED"
-    print "> VALIDATING MODEL"
+    print "MODEL GENERATED"
 
+    return model
 
+    # tf.train.Saver().save(K.get_session(), .cc_w.ckpt.)
+    # tf.train.write_graph(K.get_session().graph.as_graph_def(), ..., .cc_model.pb., False)
+
+def validate(model, X_val, y_val):
+    print "VALIDATING MODEL"
     start = time.time()
-
     preds = model.predict(X_val)
     preds = np.argmax(preds, axis=1)
-
     end = time.time()
-
     # print f1_score(y_val, preds, average='macro')
     cf = confusion_matrix(y_val, preds)
-    print "> Genuine Transaction detected as Genuine : ", cf[0][0]
-    print "> Genuine Transcation detected as Fraud   : ", cf[0][1]
-    print "> Fraud Transcation detected as Genuine   : ", cf[1][0]
-    print "> Fraud Transcation detected as Fraud     : ", cf[1][1]
-    print ">",len(preds), "Data validated in", (end - start), "seconds"
-    print ">", (1 / (end - start)) * len(preds), "validation / seconds"
-
-    # tf.train.Saver().save(K.get_session(), "cc_w.ckpt")
-    # tf.train.write_graph(K.get_session().graph.as_graph_def(), ".", "cc_model.pb", False)
+    print "Genuine Transaction detected as Genuine : ", cf[0][0]
+    print "Genuine Transcation detected as Fraud   : ", cf[0][1]
+    print "Fraud Transcation detected as Genuine   : ", cf[1][0]
+    print "Fraud Transcation detected as Fraud     : ", cf[1][1]
+    print len(preds), "Data validated in", (end - start), "seconds"
+    print (1 / (end - start)) * len(preds), "validation / seconds"
 
 
-if __name__ == "__main__":
-    print "> Loading CSV Data"
+if __name__ == '__main__':
+    np.random.seed(2)  # for reproducibility
+    
+    print 'Loading CSV Data'
     n_folds = 4
     data, labels = load_data()
     # data, labels = balanced_subsample(data, labels)
-    skf = StratifiedKFold(labels, n_folds=n_folds, shuffle=True)
+    skf = StratifiedKFold(n_folds)
+    X_train, y_train, X_val, y_val = None, None, None, None
+    Model = None
 
-    for i, (train, test) in enumerate(skf):
-        print "> GENERATE MODEL"
-        run(data[train], labels[train], data[test], labels[test])
+    for train, test in skf.split(data, labels):
+        X_train, y_train, X_val, y_val = data[train], labels[train], data[test], labels[test]
+        print 'Loaded', len(X_train), 'train data and', len(X_val), 'validation data'
         break
+
+    uin = ''
+    print '-'*50
+    print "Press enter to continue, or type 'quit' then press enter to stop"
+    while uin.lower() != 'quit':
+       uin = raw_input('>> ')
+
+       if uin.lower() == 'train':
+           Model = run(X_train, y_train, X_val, y_val)
+       elif uin.lower() == 'validate':
+           validate(Model, X_val, y_val)
